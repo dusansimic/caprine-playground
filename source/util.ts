@@ -26,16 +26,19 @@ export async function sendBackgroundAction<T, TReturn>(action: string, args?: T)
 }
 
 export function showRestartDialog(message: string): void {
-	const buttonIndex = dialog.showMessageBoxSync({
-		message,
-		detail: 'Do you want to restart the app now?',
-		buttons: [
-			'Restart',
-			'Ignore'
-		],
-		defaultId: 0,
-		cancelId: 1
-	});
+	const buttonIndex = dialog.showMessageBoxSync(
+		getWindow(),
+		{
+			message,
+			detail: 'Do you want to restart the app now?',
+			buttons: [
+				'Restart',
+				'Ignore'
+			],
+			defaultId: 0,
+			cancelId: 1
+		}
+	);
 
 	if (buttonIndex === 0) {
 		app.relaunch();
@@ -59,10 +62,10 @@ export const toggleTrayIcon = (): void => {
 	config.set('showTrayIcon', !showTrayIconState);
 
 	if (showTrayIconState) {
-		return tray.destroy();
+		tray.destroy();
+	} else {
+		tray.create(getWindow());
 	}
-
-	return tray.create(getWindow());
 };
 
 export const toggleLaunchMinimized = (menu: Menu): void => {

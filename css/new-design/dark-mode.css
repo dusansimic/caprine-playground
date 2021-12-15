@@ -1,42 +1,59 @@
 /* Top bar: App menu button color */
-[aria-label="Settings, help and more"] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
-	fill: currentColor;
-	color: var(--primary-text);
-}
-
 /* Top bar: New message button color */
-[aria-label="New Message"] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
+.j83agx80.pfnyh3mw .ozuftl9m .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
 	fill: currentColor;
 	color: var(--primary-text);
 }
 
 /* Preferences: Icon color */
-[aria-label="Preferences"] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
+[role='dialog'] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
 	fill: currentColor;
 	color: var(--primary-text);
 }
 
 /* Menu: Icon color in menu */
-[role="menu"] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
+[role='menu'] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
+	fill: currentColor;
+	color: var(--primary-text);
+}
+
+/* Chat list: Mute icon */
+.bp9cbjyn.j83agx80.btwxx1t3 .dlv3wnog.lupvgy83 .a8c37x1j {
 	fill: currentColor;
 	color: var(--primary-text);
 }
 
 /* Right sidebar: Icon color */
-.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.g5gj957u.f4tghd1a.ifue306u.kuivcneq.t63ysoy8
-[role=button] svg {
+.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.g5gj957u.f4tghd1a.ifue306u.kuivcneq.t63ysoy8 [role='button'] svg {
 	fill: currentColor;
 	color: var(--primary-text);
 }
 /* Right sidebar: search icon */
-.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.g5gj957u.f4tghd1a.ifue306u.kuivcneq.t63ysoy8
-[role=button] svg[role=presentation] path {
+.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.g5gj957u.f4tghd1a.ifue306u.kuivcneq.t63ysoy8 [role='button'] svg[role='presentation'] path {
 	fill: currentColor;
 	color: var(--primary-text);
 }
 
 /* Contact list: delivered icon color */
-.aahdfvyu [role="grid"] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
+.aahdfvyu [role='grid'] .a8c37x1j.ms05siws.hwsy1cff.b7h9ocf4 {
 	fill: currentColor;
 	color: var(--primary-text);
+}
+
+/* Removing top gap */
+/* TODO: Remove when fixed by fb */
+html.dark-mode .be9z9djy {
+	top: 0;
+}
+html.dark-mode .jgljxmt5 {
+	min-height: 100vh;
+}
+html.dark-mode .gitj76qy {
+	max-height: 100vh;
+}
+
+/* Message list: fix for received messages text color in dark mode */
+/* TODO: Remove when fixed by fb */
+.__fb-dark-mode .__fb-light-mode {
+	--primary-text: #e4e6eb;
 }

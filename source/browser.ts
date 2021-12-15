@@ -8,9 +8,9 @@ import {sendConversationList} from './browser/conversation-list';
 import {INewDesign, IToggleMuteNotifications, IToggleSounds} from './types';
 
 const selectedConversationSelector = '._5l-3._1ht1._1ht2';
-const selectedConversationNewDesign = '[role=navigation] [role=grid] [role=row] [role=link] > div:only-child';
+const selectedConversationNewDesign = '[role=navigation] [role=grid] [role=row] [role=gridcell] [role=link][aria-current]';
 const preferencesSelector = '._10._4ebx.uiLayer._4-hy';
-const preferencesSelectorNewDesign = '[aria-label=Preferences]';
+const preferencesSelectorNewDesign = 'div[class="rq0escxv l9j0dhe7 du4w35lb"] > div:nth-of-type(3) > div';
 const messengerSoundsSelector = `${preferencesSelector} ._374d ._6bkz`;
 const conversationMenuSelector = '.uiLayer:not(.hidden_elem) [role=menu]';
 const conversationMenuSelectorNewDesign = '[role=menu].l9j0dhe7.swg4t2nn';
@@ -50,7 +50,7 @@ async function withMenu(
 async function withSettingsMenu(isNewDesign: boolean, callback: () => Promise<void> | void): Promise<void> {
 	// If ui is new, get the new settings menu
 	const settingsMenu = isNewDesign ?
-		(await elementReady<HTMLElement>('.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.pfnyh3mw.d2edcug0.hpfvmrgz.aovydwv3.p8cu3f6v.kb5gq1qc.taijpn5t.b0upgy8r .j83agx80.pfnyh3mw .ozuftl9m [role=button]', {stopOnDomReady: false}))! :
+		(await elementReady<HTMLElement>('.rq0escxv.l9j0dhe7.du4w35lb.j83agx80.cbu4d94t.pfnyh3mw.d2edcug0.hpfvmrgz.aovydwv3.dz1kfvuc.kb5gq1qc.taijpn5t.b0upgy8r .j83agx80.pfnyh3mw .ozuftl9m [role=button]', {stopOnDomReady: false}))! :
 		(await elementReady<HTMLElement>('._30yy._6ymd._2agf,._30yy._2fug._p', {stopOnDomReady: false}))!;
 
 	await withMenu(isNewDesign, settingsMenu, callback);
@@ -308,7 +308,7 @@ async function toggleSounds({isNewDesign, checked}: IToggleSounds): Promise<void
 	}
 
 	if (shouldClosePreferences) {
-		closePreferences(isNewDesign);
+		await closePreferences(isNewDesign);
 	}
 }
 
@@ -333,7 +333,7 @@ ipc.answerMain('toggle-mute-notifications', async ({isNewDesign, defaultStatus}:
 	}
 
 	if (shouldClosePreferences) {
-		closePreferences(isNewDesign);
+		await closePreferences(isNewDesign);
 	}
 
 	return !isNewDesign && !notificationCheckbox.checked;
@@ -370,24 +370,81 @@ ipc.answerMain('reload', () => {
 	location.reload();
 });
 
-function setDarkMode(): void {
-	if (is.macos && config.get('followSystemAppearance')) {
-		api.nativeTheme.themeSource = 'system';
-	} else {
-		api.nativeTheme.themeSource = config.get('darkMode') ? 'dark' : 'light';
-	}
-
-	document.documentElement.classList.toggle('dark-mode', api.nativeTheme.shouldUseDarkColors);
-	document.documentElement.classList.toggle('__fb-dark-mode', api.nativeTheme.shouldUseDarkColors);
-
+function setTheme(): void {
+	api.nativeTheme.themeSource = config.get('theme');
+	setThemeElement(document.documentElement);
 	updateVibrancy();
 }
 
-function setPrivateMode(): void {
+function setThemeElement(element: HTMLElement): void {
+	const useDarkColors = Boolean(api.nativeTheme.shouldUseDarkColors);
+	element.classList.toggle('dark-mode', useDarkColors);
+	element.classList.toggle('light-mode', !useDarkColors);
+	element.classList.toggle('__fb-dark-mode', useDarkColors);
+	element.classList.toggle('__fb-light-mode', !useDarkColors);
+	removeThemeClasses(useDarkColors);
+}
+
+function removeThemeClasses(useDarkColors: boolean): void {
+	// TODO: Workaround for Facebooks buggy frontend
+	// The ui sometimes hardcodes ligth mode classes in the ui. This removes them so the class
+	// in the root element would be used.
+	const className = useDarkColors ? '__fb-light-mode' : '__fb-dark-mode';
+	for (const element of document.querySelectorAll(`.${className}`)) {
+		element.classList.remove(className);
+	}
+}
+
+async function observeTheme(): Promise<void> {
+	/* Main document's class list */
+	const observer = new MutationObserver((records: MutationRecord[]) => {
+		// Find records that had class attribute changed
+		const classRecords = records.filter(record => record.type === 'attributes' && record.attributeName === 'class');
+		// Check if dark mode classes exists
+		const isDark = classRecords.some(record => {
+			const {classList} = (record.target as HTMLElement);
+			return classList.contains('dark-mode') && classList.contains('__fb-dark-mode');
+		});
+		// If config and class list don't match, update class list
+		if (api.nativeTheme.shouldUseDarkColors !== isDark) {
+			setTheme();
+		}
+	});
+
+	observer.observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+
+	/* Added nodes (dialogs, etc.) */
+	const observerNew = new MutationObserver((records: MutationRecord[]) => {
+		const nodeRecords = records.filter(record => record.addedNodes.length > 0);
+		for (const nodeRecord of nodeRecords) {
+			for (const newNode of nodeRecord.addedNodes) {
+				const {classList} = (newNode as HTMLElement);
+				const isLight = classList.contains('light-mode') || classList.contains('__fb-light-mode');
+				if (api.nativeTheme.shouldUseDarkColors === isLight) {
+					setThemeElement(newNode as HTMLElement);
+				}
+			}
+		}
+	});
+
+	/* Observe only elements where new nodes may need dark mode */
+	const menuElements = await elementReady<HTMLElement>('.j83agx80.cbu4d94t.l9j0dhe7.jgljxmt5.be9z9djy > div:nth-of-type(2) > div', {stopOnDomReady: false});
+	if (menuElements) {
+		observerNew.observe(menuElements, {childList: true});
+	}
+
+	// Attribute notation needed here to guarantee exact (not partial) match.
+	const modalElements = await elementReady<HTMLElement>(preferencesSelectorNewDesign, {stopOnDomReady: false});
+	if (modalElements) {
+		observerNew.observe(modalElements, {childList: true});
+	}
+}
+
+function setPrivateMode(isNewDesign: boolean): void {
 	document.documentElement.classList.toggle('private-mode', config.get('privateMode'));
 
 	if (is.macos) {
-		sendConversationList();
+		sendConversationList(isNewDesign);
 	}
 }
 
@@ -437,7 +494,7 @@ async function updateDoNotDisturb(isNewDesign: boolean): Promise<void> {
 	}
 
 	if (shouldClosePreferences) {
-		closePreferences(isNewDesign);
+		await closePreferences(isNewDesign);
 	}
 }
 
@@ -464,7 +521,7 @@ ipc.answerMain('update-sidebar', () => {
 	updateSidebar();
 });
 
-ipc.answerMain('set-dark-mode', setDarkMode);
+ipc.answerMain('set-theme', setTheme);
 
 ipc.answerMain('set-private-mode', setPrivateMode);
 
@@ -579,7 +636,7 @@ function selectedConversationIndex(isNewDesign: boolean, offset = 0): number {
 	}
 
 	const newSelected = isNewDesign ?
-		selected.parentNode!.parentNode!.parentNode!.parentNode!.parentNode! as HTMLElement :
+		selected.parentNode!.parentNode!.parentNode! as HTMLElement :
 		selected;
 
 	const list = [...newSelected.parentNode!.children];
@@ -662,10 +719,10 @@ function isPreferencesOpen(isNewDesign: boolean): boolean {
 		Boolean(document.querySelector<HTMLElement>('._3quh._30yy._2t_._5ixy'));
 }
 
-function closePreferences(isNewDesign: boolean): void {
+async function closePreferences(isNewDesign: boolean): Promise<void> {
 	if (isNewDesign) {
-		const closeButton = document.querySelector<HTMLElement>('[aria-label=Preferences] [aria-label=Close]')!;
-		closeButton.click();
+		const closeButton = await elementReady<HTMLElement>(selectors.closePreferencesButton, {stopOnDomReady: false});
+		closeButton?.click();
 
 		// Wait for the preferences window to be closed, then remove the class from the document
 		const preferencesOverlayObserver = new MutationObserver(records => {
@@ -678,13 +735,13 @@ function closePreferences(isNewDesign: boolean): void {
 			}
 		});
 
-		const preferencesOverlay = document.querySelector('[data-pagelet=root] > div > div:last-child')!;
+		const preferencesOverlay = document.querySelector('div[class="rq0escxv l9j0dhe7 du4w35lb"] > div:nth-of-type(3) > div')!;
 
-		return preferencesOverlayObserver.observe(preferencesOverlay, {childList: true, subtree: true});
+		preferencesOverlayObserver.observe(preferencesOverlay, {childList: true});
+	} else {
+		const doneButton = document.querySelector<HTMLElement>('._3quh._30yy._2t_._5ixy')!;
+		doneButton.click();
 	}
-
-	const doneButton = document.querySelector<HTMLElement>('._3quh._30yy._2t_._5ixy')!;
-	doneButton.click();
 }
 
 function insertionListener(event: AnimationEvent): void {
@@ -745,18 +802,33 @@ async function observeAutoscroll(): Promise<void> {
 	conversationObserver.observe(mainElement, {childList: true});
 }
 
+async function observeThemeBugs(): Promise<void> {
+	const rootObserver = new MutationObserver((record: MutationRecord[]) => {
+		const newNodes: MutationRecord[] = record
+			.filter(record => record.addedNodes.length > 0 || record.removedNodes.length > 0);
+
+		if (newNodes) {
+			removeThemeClasses(Boolean(api.nativeTheme.shouldUseDarkColors));
+		}
+	});
+
+	rootObserver.observe(document.documentElement, {childList: true, subtree: true});
+}
+
 // Listen for emoji element dom insertion
 document.addEventListener('animationstart', insertionListener, false);
 
 // Inject a global style node to maintain custom appearance after conversation change or startup
 document.addEventListener('DOMContentLoaded', async () => {
+	const newDesign = await isNewDesign();
+
 	const style = document.createElement('style');
 	style.id = 'zoomFactor';
 	document.body.append(style);
 
 	// Set the zoom factor if it was set before quitting
 	const zoomFactor = config.get('zoomFactor');
-	setZoom(await isNewDesign(), zoomFactor);
+	setZoom(newDesign, zoomFactor);
 
 	// Enable OS specific styles
 	document.documentElement.classList.add(`os-${process.platform}`);
@@ -765,19 +837,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 	updateSidebar();
 
 	// Activate Dark Mode if it was set before quitting
-	setDarkMode();
+	setTheme();
+	// Observe for dark mode changes
+	observeTheme();
 
 	// Activate Private Mode if it was set before quitting
-	setPrivateMode();
+	setPrivateMode(newDesign);
 
 	// Configure do not disturb
 	if (is.macos) {
-		await updateDoNotDisturb(await isNewDesign());
+		await updateDoNotDisturb(newDesign);
 	}
 
 	// Prevent flash of white on startup when in dark mode
 	// TODO: find a CSS-only solution
-	if (!is.macos && config.get('darkMode')) {
+	if (!is.macos && api.nativeTheme.shouldUseDarkColors) {
 		document.documentElement.style.backgroundColor = '#1e1e1e';
 	}
 
@@ -786,6 +860,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 	// Hook auto-scroll observer
 	observeAutoscroll();
+
+	// Hook broken dark mode observer
+	observeThemeBugs();
 });
 
 // Handle title bar double-click.
@@ -848,14 +925,14 @@ document.addEventListener('keydown', async event => {
 // Pass events sent via `window.postMessage` on to the main process
 window.addEventListener('message', async ({data: {type, data}}) => {
 	if (type === 'notification') {
-		showNotification(data);
+		showNotification(data as NotificationEvent);
 	}
 
 	if (type === 'notification-reply') {
-		await sendReply(data.reply);
+		await sendReply(data.reply as string);
 
 		if (data.previousConversation) {
-			await selectConversation(await isNewDesign(), data.previousConversation);
+			await selectConversation(await isNewDesign(), data.previousConversation as number);
 		}
 	}
 });
@@ -913,8 +990,12 @@ async function sendReply(message: string): Promise<void> {
 function insertMessageText(text: string, inputField: HTMLElement): void {
 	// Workaround: insert placeholder value to get execCommand working
 	if (!inputField.textContent) {
-		const event = document.createEvent('TextEvent');
-		event.initTextEvent('textInput', true, true, window, '_', 0, '');
+		const event = new InputEvent('textInput', {
+			bubbles: true,
+			cancelable: true,
+			data: '_',
+			view: window
+		});
 		inputField.dispatchEvent(event);
 	}
 
@@ -932,8 +1013,8 @@ ipc.answerMain('notification-reply-callback', async (data: any) => {
 	window.postMessage({type: 'notification-reply-callback', data}, '*');
 });
 
-async function isNewDesign(): Promise<boolean> {
-	return Boolean(await elementReady('._9dls', {stopOnDomReady: false}));
+export async function isNewDesign(): Promise<boolean> {
+	return Boolean(await elementReady('._9dls', {stopOnDomReady: true}));
 }
 
 ipc.answerMain<undefined, boolean>('check-new-ui', async () => {
